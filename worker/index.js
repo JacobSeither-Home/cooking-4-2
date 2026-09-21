@@ -7,7 +7,7 @@
  *
  * Secrets (set via: npx wrangler secret put <NAME>):
  *   GOOGLE_API_KEY   — Google Cloud API key with Custom Search API enabled
- *   GOOGLE_SEARCH_CX — Programmable Search Engine ID (search the entire web)
+ *   GOOGLE_SEARCH_CX — Programmable Search Engine ID
  *
  * Deploy:
  *   cd worker && npm install && npx wrangler deploy
@@ -121,21 +121,16 @@ function extractFallback(html, url) {
 async function handleSearch(query, sitesParam, env) {
   if (!query) return json({ error: 'q param required' }, 400)
 
-  const domains = sitesParam ? sitesParam.split(',').map(s => s.trim()).filter(Boolean) : []
-  if (domains.length === 0) return json([])
-
   if (!env.GOOGLE_API_KEY || !env.GOOGLE_SEARCH_CX) {
     return json({ error: 'Search is not configured. Set GOOGLE_API_KEY and GOOGLE_SEARCH_CX secrets.' }, 500)
   }
 
-  // Build site-restricted query
-  const siteQuery = domains.map(d => `site:${d}`).join(' OR ')
-  const fullQuery = `${query} ${siteQuery}`
-
+  // The PSE (GOOGLE_SEARCH_CX) is already restricted to recipe sites,
+  // so we pass the query directly. No site: operators needed.
   const params = new URLSearchParams({
     key: env.GOOGLE_API_KEY,
     cx:  env.GOOGLE_SEARCH_CX,
-    q:   fullQuery,
+    q:   query,
     num: '10',
   })
 
