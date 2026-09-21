@@ -1,11 +1,12 @@
 import { useState, useEffect, createContext, useContext } from 'react'
 import {
-  signInWithPopup, signOut, onAuthStateChanged,
+  GoogleAuthProvider, signInWithCredential, signOut, onAuthStateChanged,
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
-import { auth, db, googleProvider } from '../firebase'
+import { auth, db } from '../firebase'
 
 const AuthContext = createContext(null)
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null)
@@ -21,7 +22,6 @@ export function AuthProvider({ children }) {
         if (snap.exists()) {
           setProfile(snap.data())
         } else {
-          // First sign-in: determine house from email or assign based on order
           const isJacob = firebaseUser.email === 'jacobseither@gmail.com'
           const newProfile = {
             displayName: firebaseUser.displayName,
@@ -42,8 +42,37 @@ export function AuthProvider({ children }) {
     return unsub
   }, [])
 
-  const signInWithGoogle = () => signInWithPopup(auth, googleProvider)
-  const logout           = () => signOut(auth)
+  const signInWithGoogle = () => {
+    return new Promise((resolve, reject) => {
+      if (!window.google?.accounts?.oauth2) {
+        reject(new Error('Google sign-in is still loading. Please try again in a moment.'))
+        return
+      }
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'email profile openid',
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error) {
+            reject(new Error(tokenResponse.error_description || tokenResponse.error))
+            return
+          }
+          try {
+            const credential = GoogleAuthProvider.credential(null, tokenResponse.access_token)
+            const result = await signInWithCredential(auth, credential)
+            resolve(result)
+          } catch (e) {
+            reject(e)
+          }
+        },
+        error_callback: (err) => {
+          reject(new Error(err?.type || 'Google sign-in failed'))
+        }
+      })
+      client.requestAccessToken({ prompt: 'select_account' })
+    })
+  }
+
+  const logout = () => signOut(auth)
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, logout }}>
