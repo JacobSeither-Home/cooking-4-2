@@ -5,10 +5,12 @@
  *   GET /recipe?url=<url>          Parse a recipe page → JSON
  *   GET /search?q=<q>&sites=<...>  Search across approved sites → JSON[]
  *
+ * Secrets (set via: npx wrangler secret put <NAME>):
+ *   GOOGLE_API_KEY   — Google Cloud API key with Custom Search API enabled
+ *   GOOGLE_SEARCH_CX — Programmable Search Engine ID (search the entire web)
+ *
  * Deploy:
  *   cd worker && npm install && npx wrangler deploy
- *
- * Then set VITE_WORKER_URL in your GitHub Actions secrets to the deployed URL.
  */
 
 const CORS_HEADERS = {
@@ -34,6 +36,7 @@ export default {
         return handleSearch(
           url.searchParams.get('q'),
           url.searchParams.get('sites'),
+          env,
         )
       }
       return json({ error: 'Not found' }, 404)
@@ -58,12 +61,10 @@ async function handleRecipe(targetUrl) {
 
   const html = await res.text()
 
-  // 1. Try JSON-LD (most reliable — used by NYT, Serious Eats, AllRecipes, etc.)
   const recipe = extractJsonLd(html) || extractMicrodata(html) || extractFallback(html, targetUrl)
 
   if (!recipe) return json({ error: 'Could not parse recipe from this page.' }, 422)
 
-  // Normalize and enrich
   recipe.sourceUrl  = targetUrl
   recipe.sourceSite = new URL(targetUrl).hostname.replace(/^www\./, '')
 
@@ -103,7 +104,6 @@ function normalizeJsonLdRecipe(r) {
 }
 
 function extractMicrodata(html) {
-  // Very basic microdata fallback — grab OG title + description at minimum
   const title = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i)?.[1]
   const desc  = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i)?.[1]
   const image = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)?.[1]
@@ -117,59 +117,45 @@ function extractFallback(html, url) {
   return { title, description: '', image: '', ingredients: [], steps: [], genre: [] }
 }
 
-// ── /search ───────────────────────────────────────────────────────────────────
-async function handleSearch(query, sitesParam) {
+// ── /search — uses Google Custom Search JSON API ──────────────────────────────
+async function handleSearch(query, sitesParam, env) {
   if (!query) return json({ error: 'q param required' }, 400)
 
   const domains = sitesParam ? sitesParam.split(',').map(s => s.trim()).filter(Boolean) : []
   if (domains.length === 0) return json([])
 
-  // Build a Google search URL with site: operators
-  const siteQuery = domains.map(d => `site:${d}`).join(' OR ')
-  const fullQuery = `${query} recipe ${siteQuery}`
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(fullQuery)}&num=20`
-
-  const res = await fetch(searchUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
-  })
-
-  if (!res.ok) return json([])
-
-  const html = await res.text()
-  const results = parseGoogleResults(html, domains)
-
-  return json(results)
-}
-
-function parseGoogleResults(html, allowedDomains) {
-  const results = []
-  // Extract result blocks — Google's HTML structure for organic results
-  const blocks = html.matchAll(/<div[^>]*class="[^"]*g[^"]*"[^>]*>([\s\S]*?)<\/div>\s*(?=<div[^>]*class="[^"]*g[^"]*"|$)/g)
-
-  for (const block of blocks) {
-    try {
-      const content = block[1]
-      const href    = content.match(/href="(https?:\/\/[^"]+)"/)?.[1]
-      if (!href) continue
-
-      const domain = new URL(href).hostname.replace(/^www\./, '')
-      if (!allowedDomains.some(d => href.includes(d))) continue
-
-      const title = content.match(/<h3[^>]*>([^<]+)<\/h3>/)?.[1]?.trim()
-      if (!title) continue
-
-      const desc = content.match(/<span[^>]*>([^<]{30,200})<\/span>/)?.[1]?.trim()
-      const img  = content.match(/src="([^"]+)"[^>]*>/)?.[1]
-
-      results.push({ title, url: href, description: desc || '', image: img || '', site: domain })
-      if (results.length >= 12) break
-    } catch {}
+  if (!env.GOOGLE_API_KEY || !env.GOOGLE_SEARCH_CX) {
+    return json({ error: 'Search is not configured. Set GOOGLE_API_KEY and GOOGLE_SEARCH_CX secrets.' }, 500)
   }
 
-  return results
+  // Build site-restricted query
+  const siteQuery = domains.map(d => `site:${d}`).join(' OR ')
+  const fullQuery = `${query} ${siteQuery}`
+
+  const params = new URLSearchParams({
+    key: env.GOOGLE_API_KEY,
+    cx:  env.GOOGLE_SEARCH_CX,
+    q:   fullQuery,
+    num: '10',
+  })
+
+  const res = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`)
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    return json({ error: errBody?.error?.message || `Search API returned ${res.status}` }, 502)
+  }
+
+  const data = await res.json()
+
+  const results = (data.items || []).map(item => ({
+    title:       item.title || '',
+    url:         item.link  || '',
+    description: item.snippet || '',
+    image:       item.pagemap?.cse_image?.[0]?.src || item.pagemap?.cse_thumbnail?.[0]?.src || '',
+    site:        (() => { try { return new URL(item.link).hostname.replace(/^www\./, '') } catch { return '' } })(),
+  }))
+
+  return json(results)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -194,8 +180,7 @@ function parseServings(yield_) {
 }
 
 function parseIngredient(str) {
-  // Attempt to split "1 cup flour" → { quantity: '1', unit: 'cup', name: 'flour' }
-  const m = str.trim().match(/^([\d\s⁄/]+)?\s*(cup|cups|tbsp|tsp|oz|lb|lbs|g|kg|ml|l|clove|cloves|bunch|bunches|piece|pieces|slice|slices|can|cans|pkg|package|inch|large|medium|small)s?\s+(.+)/i)
+  const m = str.trim().match(/^([\d\s⁄\/]+)?\s*(cup|cups|tbsp|tsp|oz|lb|lbs|g|kg|ml|l|clove|cloves|bunch|bunches|piece|pieces|slice|slices|can|cans|pkg|package|inch|large|medium|small)s?\s+(.+)/i)
   if (m) return { quantity: (m[1] || '').trim(), unit: m[2], name: m[3].trim() }
   return { quantity: '', unit: '', name: str.trim() }
 }
