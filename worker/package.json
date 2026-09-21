@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev":    "wrangler dev"
+    "dev": "wrangler dev"
   },
   "devDependencies": {
-    "wrangler": "^3.60.0"
+    "wrangler": "^4.136.1"
   }
 }
