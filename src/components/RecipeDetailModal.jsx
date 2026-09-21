@@ -1,0 +1,147 @@
+import { X, Clock, Users, ExternalLink, BookmarkCheck, Bookmark, Plus, ChefHat } from 'lucide-react'
+import { StarRating, DecoDivider, DecoCornerFrame } from './DecoFrame'
+import { useMealPlan } from '../hooks/useFirestore'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+
+export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) {
+  const { addPlan } = useMealPlan()
+  const navigate    = useNavigate()
+  const [adding, setAdding] = useState(false)
+  const [added,  setAdded]  = useState(false)
+
+  const handleAddToPlan = async () => {
+    setAdding(true)
+    await addPlan({
+      date:        new Date().toISOString().split('T')[0],
+      recipeId:    recipe.id || null,
+      recipeTitle: recipe.title,
+      recipeImage: recipe.image || null,
+      sourceSite:  recipe.sourceSite || '',
+      servings:    recipe.servings || 2,
+      notes:       '',
+      assignedTo:  'both',
+    })
+    setAdded(true)
+    setAdding(false)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-base/90 backdrop-blur-sm flex items-end justify-center"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-lg bg-surface border border-border rounded-t-2xl max-h-[90vh] overflow-y-auto animate-slide-up">
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-border" />
+        </div>
+
+        {/* Image */}
+        {recipe.image && (
+          <div className="relative h-56 mx-0 overflow-hidden">
+            <img src={recipe.image} alt={recipe.title} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/20 to-transparent" />
+          </div>
+        )}
+
+        <div className="px-5 pb-8 space-y-4">
+          {/* Title + meta */}
+          <div>
+            <div className="flex items-start justify-between gap-3 mt-2">
+              <h2 className="font-display text-2xl text-cream leading-tight flex-1">{recipe.title}</h2>
+              <button onClick={onClose} className="btn-icon flex-shrink-0">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-cream/50">
+              {recipe.sourceSite && <span>{recipe.sourceSite}</span>}
+              {recipe.prepTime && (
+                <span className="flex items-center gap-1"><Clock size={11} /> {recipe.prepTime + (recipe.cookTime || 0)} min</span>
+              )}
+              {recipe.servings && (
+                <span className="flex items-center gap-1"><Users size={11} /> {recipe.servings} servings</span>
+              )}
+              {recipe.rating > 0 && <StarRating rating={recipe.rating} size={12} />}
+            </div>
+
+            {recipe.description && (
+              <p className="text-sm text-cream/60 mt-2 leading-relaxed">{recipe.description}</p>
+            )}
+          </div>
+
+          <DecoDivider />
+
+          {/* Ingredients */}
+          {recipe.ingredients?.length > 0 && (
+            <section>
+              <h3 className="font-display text-sm text-gold/80 uppercase tracking-widest mb-3">Ingredients</h3>
+              <ul className="space-y-1.5">
+                {recipe.ingredients.map((ing, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-cream/80">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gold/40 mt-1.5 flex-shrink-0" />
+                    <span>
+                      {ing.quantity && <span className="text-gold/70">{ing.quantity} {ing.unit} </span>}
+                      {ing.name || ing}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Steps preview (first 3) */}
+          {recipe.steps?.length > 0 && (
+            <section>
+              <h3 className="font-display text-sm text-gold/80 uppercase tracking-widest mb-3">Method</h3>
+              <ol className="space-y-3">
+                {recipe.steps.slice(0, 3).map((step, i) => (
+                  <li key={i} className="flex gap-3 text-sm text-cream/70 leading-relaxed">
+                    <span className="step-bubble flex-shrink-0">{i + 1}</span>
+                    <span className="pt-1">{step}</span>
+                  </li>
+                ))}
+                {recipe.steps.length > 3 && (
+                  <p className="text-xs text-cream/30 pl-11">+{recipe.steps.length - 3} more steps</p>
+                )}
+              </ol>
+            </section>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={onSave}
+              className={`flex-1 ${isSaved ? 'btn-ghost' : 'btn-gold'}`}
+            >
+              {isSaved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
+              {isSaved ? 'Saved' : 'Save Recipe'}
+            </button>
+
+            <button
+              onClick={handleAddToPlan}
+              disabled={adding}
+              className="flex-1 btn-pink disabled:opacity-50"
+            >
+              <Plus size={15} />
+              {added ? 'Added!' : adding ? '…' : 'Add to Plan'}
+            </button>
+          </div>
+
+          {recipe.sourceUrl && (
+            <a
+              href={recipe.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 text-xs text-cream/30 hover:text-gold transition-colors"
+            >
+              <ExternalLink size={12} />
+              View on {recipe.sourceSite || 'original site'}
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

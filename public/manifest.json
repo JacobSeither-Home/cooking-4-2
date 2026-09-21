@@ -1,0 +1,15 @@
+{
+  "name": "Cooking 4 2",
+  "short_name": "Cooking 4 2",
+  "description": "Meal planning for two households — discover, plan, shop, cook.",
+  "theme_color": "#0D0608",
+  "background_color": "#0D0608",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/cooking-4-2/",
+  "start_url": "/cooking-4-2/",
+  "icons": [
+    { "src": "/cooking-4-2/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/cooking-4-2/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

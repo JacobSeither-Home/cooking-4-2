@@ -1,0 +1,165 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-base text-cream font-body antialiased;
+    overscroll-behavior: none;
+    /* iOS safe-area insets */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  h1, h2, h3, h4 { @apply font-display; }
+
+  input, textarea, select {
+    @apply bg-raised border border-border text-cream placeholder-cream/30 rounded-lg px-3 py-2 outline-none;
+    transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus, select:focus {
+    @apply border-gold;
+    box-shadow: 0 0 0 2px rgba(200, 151, 58, 0.15);
+  }
+
+  button { @apply cursor-pointer; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { @apply bg-surface; }
+  ::-webkit-scrollbar-thumb { @apply bg-gold-dark rounded-full; }
+}
+
+/* ── Components ── */
+@layer components {
+  /* Buttons */
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-body font-medium text-base
+           bg-gold text-base border border-gold/50 transition-all duration-200
+           hover:bg-gold-light hover:shadow-gold active:scale-95;
+  }
+  .btn-pink {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-body font-medium text-base
+           bg-pink text-white border border-pink/50 transition-all duration-200
+           hover:bg-pink-light hover:shadow-pink active:scale-95;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-body font-medium text-sm
+           text-cream/70 border border-border transition-all duration-200
+           hover:border-gold/40 hover:text-cream hover:bg-raised active:scale-95;
+  }
+  .btn-icon {
+    @apply inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border text-cream/60
+           hover:border-gold/40 hover:text-gold transition-all duration-200 active:scale-90;
+  }
+
+  /* Cards */
+  .card {
+    @apply bg-surface border border-border rounded-xl overflow-hidden
+           transition-all duration-200;
+  }
+  .card-hover {
+    @apply card hover:border-gold/40 hover:shadow-gold cursor-pointer;
+  }
+
+  /* Deco ornament line */
+  .deco-line {
+    @apply flex items-center gap-3 text-gold/50;
+  }
+  .deco-line::before, .deco-line::after {
+    content: '';
+    @apply flex-1 h-px bg-gradient-to-r from-transparent via-gold/30 to-transparent;
+  }
+
+  /* Tags */
+  .tag {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border;
+  }
+  .tag-gold  { @apply tag bg-gold/10 text-gold border-gold/30; }
+  .tag-pink  { @apply tag bg-pink/10 text-pink border-pink/30; }
+  .tag-cream { @apply tag bg-cream/10 text-cream/70 border-cream/20; }
+
+  /* Section header */
+  .section-title {
+    @apply font-display text-xl text-cream tracking-wide mb-1;
+  }
+  .section-subtitle {
+    @apply text-sm text-cream/50 font-body;
+  }
+
+  /* Input group */
+  .input-label {
+    @apply block text-xs font-medium text-cream/60 mb-1 uppercase tracking-widest;
+  }
+
+  /* Step bubble */
+  .step-bubble {
+    @apply w-8 h-8 rounded-full border-2 border-gold flex items-center justify-center
+           font-display font-bold text-sm text-gold flex-shrink-0;
+  }
+
+  /* Star rating */
+  .stars { @apply flex gap-0.5; }
+  .star-filled { @apply text-gold; }
+  .star-empty  { @apply text-border; }
+
+  /* Bottom nav safe area */
+  .nav-safe { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+}
+
+/* ── Art Deco SVG flourishes as pseudo-elements ── */
+.deco-corner {
+  position: relative;
+}
+.deco-corner::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 24px; height: 24px;
+  border-top: 1px solid theme('colors.gold.DEFAULT');
+  border-left: 1px solid theme('colors.gold.DEFAULT');
+  opacity: 0.4;
+}
+.deco-corner::after {
+  content: '';
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 24px; height: 24px;
+  border-bottom: 1px solid theme('colors.gold.DEFAULT');
+  border-right: 1px solid theme('colors.gold.DEFAULT');
+  opacity: 0.4;
+}
+
+/* ── Animations ── */
+.animate-fade-in  { animation: fadeIn 0.3s ease-out both; }
+.animate-slide-up { animation: slideUp 0.35s ease-out both; }
+
+@keyframes fadeIn  { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+@keyframes shimmer { 0%, 100% { opacity: 0.4 } 50% { opacity: 1 } }
+
+/* Skeleton shimmer */
+.skeleton {
+  @apply bg-raised rounded animate-pulse;
+  background: linear-gradient(90deg, #1A0B11 25%, #241320 50%, #1A0B11 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+}
+@keyframes skeletonShimmer {
+  from { background-position: 200% 0 }
+  to   { background-position: -200% 0 }
+}
+
+/* ── iOS PWA overrides ── */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .ios-top { padding-top: max(1rem, env(safe-area-inset-top)); }
+}
