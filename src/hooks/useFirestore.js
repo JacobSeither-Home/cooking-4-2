@@ -220,7 +220,6 @@ export function useSites() {
 
 // ── Default recipe sites ──────────────────────────────────────────────────────
 export const DEFAULT_SITES = [
-  { id: 'nytcooking',      domain: 'cooking.nytimes.com',    name: 'NYT Cooking',        searchPath: '/search?q=', enabled: true, genres: ['all'], minRating: 0 },
   { id: 'seriouseats',     domain: 'www.seriouseats.com',    name: 'Serious Eats',        searchPath: '/search?q=', enabled: true, genres: ['all'], minRating: 0 },
   { id: 'budgetbytes',     domain: 'www.budgetbytes.com',    name: 'Budget Bytes',        searchPath: '/?s=',       enabled: true, genres: ['all'], minRating: 0 },
   { id: 'halfbakedharvest',domain: 'www.halfbakedharvest.com',name: 'Half Baked Harvest', searchPath: '/?s=',       enabled: true, genres: ['all'], minRating: 0 },

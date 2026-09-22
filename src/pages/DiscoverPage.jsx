@@ -1,5 +1,22 @@
 import { useState, useCallback } from 'react'
-import { Search, Link2, X } from 'lucide-react'
+import { Search, Link2, X, Sparkles } from 'lucide-react'
+
+// ── Spelling suggestion via Datamuse (free, no key) ───────────────────────────
+async function suggestSpelling(query) {
+  const words = query.trim().split(/\s+/)
+  try {
+    const corrected = await Promise.all(words.map(async (word) => {
+      if (word.length < 4) return word   // skip short words like "and", "for"
+      const res  = await fetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&max=1`)
+      const data = await res.json()
+      return (data.length > 0 && data[0].word !== word.toLowerCase()) ? data[0].word : word
+    }))
+    const suggestion = corrected.join(' ')
+    return suggestion.toLowerCase() !== query.toLowerCase() ? suggestion : null
+  } catch {
+    return null
+  }
+}
 import { PageHeader, EmptyState, SkeletonCard, DecoDivider } from '../components/DecoFrame'
 import RecipeCard from '../components/RecipeCard'
 import { useRecipes, useSites } from '../hooks/useFirestore'
@@ -21,6 +38,7 @@ export default function DiscoverPage() {
   const [importing,  setImporting]  = useState(false)
   const [error,      setError]      = useState(null)
   const [selected,   setSelected]   = useState(null)  // recipe to show in modal
+  const [suggestion, setSuggestion] = useState(null)  // spelling suggestion
 
   const savedIds = new Set(recipes.map(r => r.sourceUrl))
 
@@ -29,21 +47,37 @@ export default function DiscoverPage() {
   const plannedRecipes   = recipes.filter(r => plannedRecipeIds.has(r.id))
   const recommendations  = getRecommendations(plannedRecipes, recipes, 5)
 
-  const handleSearch = useCallback(async (e) => {
-    e.preventDefault()
-    if (!query.trim()) return
+  const runSearch = useCallback(async (q) => {
     setSearching(true)
     setError(null)
     setResults([])
+    setSuggestion(null)
     try {
-      const data = await searchRecipes(query, sites)
+      const [data, spell] = await Promise.all([
+        searchRecipes(q, sites),
+        suggestSpelling(q),
+      ])
       setResults(data)
+      // Only surface spelling suggestion if results look thin (< 3) or query differs
+      if (spell && data.length < 3) setSuggestion(spell)
     } catch (err) {
       setError(err.message)
     } finally {
       setSearching(false)
     }
-  }, [query, sites])
+  }, [sites])
+
+  const handleSearch = useCallback(async (e) => {
+    e.preventDefault()
+    if (!query.trim()) return
+    await runSearch(query)
+  }, [query, runSearch])
+
+  const handleSuggestionClick = useCallback(async (spell) => {
+    setQuery(spell)
+    setSuggestion(null)
+    await runSearch(spell)
+  }, [runSearch])
 
   const handleImportUrl = useCallback(async () => {
     if (!urlInput.trim()) return
@@ -117,8 +151,9 @@ export default function DiscoverPage() {
               type="text"
               placeholder="Search recipes across your sites…"
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={e => { setQuery(e.target.value); setSuggestion(null) }}
               className="w-full pl-9 pr-4"
+              spellCheck
             />
           </div>
           <button type="submit" className="btn-gold px-4">Go</button>

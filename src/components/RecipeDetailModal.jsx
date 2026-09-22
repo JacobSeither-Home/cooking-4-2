@@ -1,7 +1,7 @@
 import { X, Clock, Users, ExternalLink, BookmarkCheck, Bookmark, Plus, Loader } from 'lucide-react'
 import { StarRating, DecoDivider } from './DecoFrame'
 import { useMealPlan } from '../hooks/useFirestore'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) {
@@ -9,6 +9,26 @@ export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) 
   const navigate    = useNavigate()
   const [adding, setAdding] = useState(false)
   const [added,  setAdded]  = useState(false)
+  const scrollRef = useRef(null)
+
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    const prevOverflow  = document.body.style.overflow
+    const prevOverscroll = document.body.style.overscrollBehavior
+    document.body.style.overflow         = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
+    return () => {
+      document.body.style.overflow         = prevOverflow
+      document.body.style.overscrollBehavior = prevOverscroll
+    }
+  }, [])
+
+  // Scroll to top whenever loading finishes (content just replaced skeleton)
+  useEffect(() => {
+    if (!recipe._loading && scrollRef.current) {
+      scrollRef.current.scrollTop = 0
+    }
+  }, [recipe._loading])
 
   const handleAddToPlan = async () => {
     setAdding(true)
