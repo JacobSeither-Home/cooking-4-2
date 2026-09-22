@@ -4,6 +4,7 @@
  * Routes:
  *   GET /recipe?url=<url>          Parse a recipe page → JSON
  *   GET /search?q=<q>&sites=<...>  Search across approved sites → JSON[]
+ *   GET /debug                     Verify secrets + raw Google API response
  *
  * Secrets (set via: npx wrangler secret put <NAME>):
  *   GOOGLE_API_KEY   — Google Cloud API key with Custom Search API enabled
@@ -39,11 +40,37 @@ export default {
           env,
         )
       }
+      if (pathname === '/debug') {
+        return handleDebug(env)
+      }
       return json({ error: 'Not found' }, 404)
     } catch (err) {
       return json({ error: err.message }, 500)
     }
   },
+}
+
+// ── /debug ────────────────────────────────────────────────────────────────────
+async function handleDebug(env) {
+  const key = env.GOOGLE_API_KEY || ''
+  const cx  = env.GOOGLE_SEARCH_CX || ''
+
+  const keyInfo = key
+    ? `set (length=${key.length}, starts=${key.slice(0,8)}..., ends=...${key.slice(-4)})`
+    : 'NOT SET'
+  const cxInfo = cx || 'NOT SET'
+
+  // Make a real test call
+  const params = new URLSearchParams({ key, cx, q: 'pasta', num: '1' })
+  const res = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`)
+  const body = await res.json().catch(() => ({}))
+
+  return json({
+    keyInfo,
+    cx: cxInfo,
+    googleStatus: res.status,
+    googleResponse: body,
+  })
 }
 
 // ── /recipe ───────────────────────────────────────────────────────────────────
