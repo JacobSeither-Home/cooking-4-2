@@ -191,84 +191,123 @@ function extractSearchJsonLd(html, domain) {
   return results
 }
 
-// ── Generic HTML link extractor ───────────────────────────────────────────────
-// Finds <a href> links that look like recipe pages, then pulls a nearby image + title.
+// ── Generic HTML extractor ────────────────────────────────────────────────────
+// Pass 1: <article> blocks — WordPress recipe blogs always put search result cards in <article>
+// Pass 2: named card divs — AllRecipes, NYT Cooking, Bon Appétit, etc.
 function extractRecipeLinks(html, domain, searchUrl) {
   const baseUrl = `https://${domain}`
   const seen    = new Set()
   const results = []
 
-  // Regex to capture <a> tags with their content
-  const aTagRe = /<a\s[^>]*href=["']([^"'#?][^"']*)["'][^>]*>([\s\S]{0,600}?)<\/a>/gi
-  let m
+  // Pass 1 — <article> blocks
+  const articleRe = /<article\b[^>]*>([\s\S]*?)<\/article>/gi
+  let am
+  while ((am = articleRe.exec(html)) !== null && results.length < 8) {
+    const card = parseBlock(am[1], domain, baseUrl, /* lenient= */ true)
+    if (card && !seen.has(card.url)) { seen.add(card.url); results.push(card) }
+  }
 
-  while ((m = aTagRe.exec(html)) !== null && results.length < 7) {
-    let href    = m[1].trim()
-    const inner = m[2]
+  if (results.length >= 3) return results
 
-    // Normalise to absolute URL
-    if (href.startsWith('/')) href = baseUrl + href
-    if (!href.startsWith('http')) continue
-
-    // Must stay on this domain
-    try {
-      const u = new URL(href)
-      if (u.hostname !== domain && u.hostname !== `www.${domain}` && `www.${u.hostname}` !== domain) continue
-    } catch { continue }
-
-    if (seen.has(href)) continue
-    if (!looksLikeRecipeUrl(href)) continue
-    seen.add(href)
-
-    // Extract title from the anchor's inner HTML
-    const title = cleanText(stripTags(inner))
-    if (!title || title.length < 4 || title.length > 120) continue
-
-    // Extract image from the anchor's inner HTML (thumbnails are often inside the <a>)
-    const image = extractFirstImage(inner) || extractFirstImage(
-      html.slice(Math.max(0, m.index - 800), m.index + 800)
-    ) || ''
-
-    // Try to get a short description from a nearby <p>
-    const nearbyHtml = html.slice(m.index, m.index + 1200)
-    const desc = cleanText(stripTags(
-      nearbyHtml.match(/<p[^>]*>([\s\S]{20,200}?)<\/p>/i)?.[1] || ''
-    ))
-
-    results.push({
-      title,
-      url:  href,
-      image: resolveImageUrl(image, baseUrl),
-      description: desc.length > 20 && desc !== title ? desc : '',
-      site: domain.replace(/^www\./, ''),
-    })
+  // Pass 2 — named card divs
+  const cardRe = /<div[^>]+class="[^"]*(?:card|result|recipe-item|search-result|recipe-list-item|listing)[^"]*"[^>]*>([\s\S]{80,2500}?)<\/div>/gi
+  let dm
+  while ((dm = cardRe.exec(html)) !== null && results.length < 8) {
+    const card = parseBlock(dm[1], domain, baseUrl, /* lenient= */ false)
+    if (card && !seen.has(card.url)) { seen.add(card.url); results.push(card) }
   }
 
   return results
 }
 
+// Parse a block of HTML (article or named div) → recipe card or null
+function parseBlock(blockHtml, domain, baseUrl, lenient) {
+  const linkRe = /<a\s[^>]*href=["']([^"'#?][^"']*)["'][^>]*>/gi
+  let lm, href = null
+
+  while ((lm = linkRe.exec(blockHtml)) !== null) {
+    let h = lm[1].trim()
+    if (h.startsWith('/')) h = baseUrl + h
+    if (!h.startsWith('http')) continue
+
+    let hostname
+    try { hostname = new URL(h).hostname } catch { continue }
+
+    const sameDomain = hostname === domain
+      || hostname === `www.${domain}`
+      || `www.${hostname}` === domain
+    if (!sameDomain) continue
+
+    // Lenient mode (inside <article>): skip obvious non-recipe patterns only
+    // Strict mode: apply full URL heuristics
+    if (lenient) {
+      if (SKIP_URL_PATTERNS.some(re => re.test(h))) continue
+    } else {
+      if (!looksLikeRecipeUrl(h)) continue
+    }
+
+    href = h
+    break
+  }
+
+  if (!href) return null
+
+  // Title: h2/h3 preferred over anchor text
+  const headingMatch = blockHtml.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)
+  let title = headingMatch ? cleanText(stripTags(headingMatch[1])) : ''
+  if (!title) {
+    const aText = blockHtml.match(/<a[^>]+href=["'][^"']+["'][^>]*>([^<]{5,120})<\/a>/i)
+    title = aText ? cleanText(stripTags(aText[1])) : ''
+  }
+
+  if (!title || title.length < 5 || title.length > 120) return null
+  if (looksLikeCategory(title)) return null
+
+  const image = extractFirstImage(blockHtml) || ''
+  const descMatch = blockHtml.match(/<p[^>]*>([\s\S]{20,250}?)<\/p>/i)
+  const desc = cleanText(stripTags(descMatch?.[1] || ''))
+
+  return {
+    title,
+    url:   href,
+    image: resolveImageUrl(image, baseUrl),
+    description: desc.length > 20 && desc !== title ? desc : '',
+    site:  domain.replace(/^www\./, ''),
+  }
+}
+
+// Reject titles that are clearly collection/category pages, not individual recipes
+function looksLikeCategory(title) {
+  return /^(most popular|collections?|soups?(?: and | & )stews?|easy side dishes?|quick(?: and | & )easy|healthy recipes?|dinner ideas?|chicken recipes?|beef recipes?|vegetarian recipes?|vegan recipes?|pasta recipes?|salad recipes?|one[ -]pan meals?|sheet pan|meal prep|browse all|see all|more recipes?|popular recipes?|featured recipes?)\s*$/i.test(title)
+}
+
 // ── URL heuristics ────────────────────────────────────────────────────────────
 const SKIP_URL_PATTERNS = [
-  /\/(author|authors|category|categories|tag|tags|page|pages|search|about|contact|privacy|terms|faq|shop|subscribe|login|register|account|cart|checkout|sitemap|feed|rss|cdn-cgi)\b/i,
+  /\/(author|authors|category|categories|tag|tags|page|pages|search|about|contact|privacy|terms|faq|shop|subscribe|login|register|account|cart|checkout|sitemap|feed|rss|cdn-cgi|newsletter|collection|collections|roundup|roundups)\b/i,
   /\.(jpg|jpeg|png|gif|webp|svg|pdf|css|js|xml|txt|ico)(\?|$)/i,
   /#/,
 ]
 
-const RECIPE_URL_HINTS = [
-  /\/recipe[s]?\//i,
-  /\/[a-z0-9]+(?:-[a-z0-9]+){3,}\/?$/i,  // long kebab slug (4+ segments)
-]
-
 function looksLikeRecipeUrl(url) {
   for (const re of SKIP_URL_PATTERNS) if (re.test(url)) return false
-  // Allrecipes: /recipe/12345/name/
-  if (/allrecipes\.com\/recipe\/\d+/i.test(url)) return true
-  // food52: /recipes/12345-name
-  if (/food52\.com\/recipes\/\d+/i.test(url)) return true
-  // thekitchn: /name-recipe-NNN
-  if (/thekitchn\.com\/.+-\d{6,}/i.test(url)) return true
-  // General: contains /recipe/ or long slug
-  for (const re of RECIPE_URL_HINTS) if (re.test(url)) return true
+
+  // Site-specific exact patterns
+  if (/allrecipes\.com\/recipe\/\d+/i.test(url))        return true
+  if (/food52\.com\/recipes\/\d+/i.test(url))           return true
+  if (/thekitchn\.com\/.+-\d{6,}/i.test(url))           return true
+  if (/bonappetit\.com\/recipe\//i.test(url))            return true
+  if (/cooking\.nytimes\.com\/recipes\/\d+/i.test(url)) return true
+  if (/seriouseats\.com\/.+-recipe(-\d+)?$/i.test(url)) return true
+
+  // /recipe/ singular followed by a specific page
+  if (/\/recipe\/[^/]{4,}/i.test(url)) return true
+
+  // WordPress slug: final path segment has 3+ hyphens = 4+ word recipe name
+  try {
+    const pathEnd = new URL(url).pathname.replace(/\/$/, '').split('/').pop() || ''
+    if ((pathEnd.match(/-/g) || []).length >= 3) return true
+  } catch {}
+
   return false
 }
 
