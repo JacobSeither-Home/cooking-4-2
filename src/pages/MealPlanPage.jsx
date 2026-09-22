@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Calendar, Plus, Trash2, ChefHat, ShoppingCart } from 'lucide-react'
+import { Calendar, Plus, Trash2, ChefHat, ShoppingCart, MoveRight } from 'lucide-react'
 import { format, addDays, startOfWeek, isSameDay, parseISO } from 'date-fns'
 import { PageHeader, EmptyState, DecoDivider, HouseBadge } from '../components/DecoFrame'
 import { RecipeListItem } from '../components/RecipeCard'
@@ -9,13 +9,14 @@ import { buildGroceryList } from '../services/recipeService'
 import { useGroceryLists } from '../hooks/useFirestore'
 
 export default function MealPlanPage() {
-  const { plans, loading, removePlan } = useMealPlan()
+  const { plans, loading, removePlan, updatePlan } = useMealPlan()
   const { recipes } = useRecipes()
   const { createList } = useGroceryLists()
   const navigate = useNavigate()
 
   const [weekOffset, setWeekOffset] = useState(0)
   const [generating, setGenerating] = useState(false)
+  const [movingPlanId, setMovingPlanId] = useState(null)
 
   // Build the 7-day week
   const weekStart = startOfWeek(addDays(new Date(), weekOffset * 7), { weekStartsOn: 1 })
@@ -41,7 +42,6 @@ export default function MealPlanPage() {
     if (weekPlans.length === 0) return
     setGenerating(true)
     try {
-      // Collect recipes for this week's plans
       const weekRecipes = weekPlans
         .map(p => recipes.find(r => r.id === p.recipeId))
         .filter(Boolean)
@@ -55,6 +55,18 @@ export default function MealPlanPage() {
     } finally {
       setGenerating(false)
     }
+  }
+
+  const cycleAssignment = (plan) => {
+    const next = plan.assignedTo === 'both' ? 'jacob'
+               : plan.assignedTo === 'jacob' ? 'caroline'
+               : 'both'
+    updatePlan(plan.id, { assignedTo: next })
+  }
+
+  const movePlanToDay = (planId, newDate) => {
+    updatePlan(planId, { date: newDate })
+    setMovingPlanId(null)
   }
 
   return (
@@ -115,33 +127,77 @@ export default function MealPlanPage() {
               ) : (
                 <div className="divide-y divide-border/50">
                   {meals.map(plan => (
-                    <div key={plan.id} className="flex items-center gap-3 px-3 py-2.5">
-                      {plan.recipeImage
-                        ? <img src={plan.recipeImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                        : <div className="w-10 h-10 rounded-lg bg-raised flex items-center justify-center text-lg flex-shrink-0">🍴</div>
-                      }
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-display text-cream truncate">{plan.recipeTitle}</p>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-cream/30">{plan.servings} servings</span>
-                          <HouseBadge house={plan.assignedTo} size="xs" />
+                    <div key={plan.id}>
+                      <div className="flex items-center gap-3 px-3 py-2.5">
+                        {plan.recipeImage
+                          ? <img src={plan.recipeImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                          : <div className="w-10 h-10 rounded-lg bg-raised flex items-center justify-center text-lg flex-shrink-0">🍴</div>
+                        }
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-display text-cream truncate">{plan.recipeTitle}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-cream/30">{plan.servings} servings</span>
+                            {/* Clickable badge cycles Jacob → Caroline → Both */}
+                            <button
+                              onClick={() => cycleAssignment(plan)}
+                              title="Tap to change who's eating"
+                              className="hover:opacity-70 transition-opacity"
+                            >
+                              <HouseBadge house={plan.assignedTo || 'both'} size="xs" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          {/* Move to day */}
+                          <button
+                            onClick={() => setMovingPlanId(movingPlanId === plan.id ? null : plan.id)}
+                            className={`btn-icon w-7 h-7 ${movingPlanId === plan.id ? 'text-gold' : 'text-cream/40 hover:text-gold'}`}
+                            title="Move to different day"
+                          >
+                            <MoveRight size={13} />
+                          </button>
+                          <button
+                            onClick={() => navigate('/cook', { state: { planId: plan.id } })}
+                            className="btn-icon w-7 h-7 text-cream/40 hover:text-gold"
+                            title="Cook this"
+                          >
+                            <ChefHat size={13} />
+                          </button>
+                          <button
+                            onClick={() => removePlan(plan.id)}
+                            className="btn-icon w-7 h-7 text-cream/30 hover:text-pink"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => navigate('/cook', { state: { planId: plan.id } })}
-                          className="btn-icon w-7 h-7 text-cream/40 hover:text-gold"
-                          title="Cook this"
-                        >
-                          <ChefHat size={13} />
-                        </button>
-                        <button
-                          onClick={() => removePlan(plan.id)}
-                          className="btn-icon w-7 h-7 text-cream/30 hover:text-pink"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+
+                      {/* Move-to-day picker */}
+                      {movingPlanId === plan.id && (
+                        <div className="px-3 pb-2.5 pt-0">
+                          <p className="text-[10px] text-cream/40 mb-1.5">Move to:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {days.map(d => {
+                              const dKey = format(d, 'yyyy-MM-dd')
+                              const isCurrent = dKey === plan.date
+                              return (
+                                <button
+                                  key={dKey}
+                                  onClick={() => !isCurrent && movePlanToDay(plan.id, dKey)}
+                                  disabled={isCurrent}
+                                  className={`text-[11px] px-2 py-1 rounded-md transition-colors
+                                    ${isCurrent
+                                      ? 'bg-gold/20 text-gold cursor-default'
+                                      : 'bg-raised hover:bg-gold/10 hover:text-gold text-cream/50'
+                                    }`}
+                                >
+                                  {format(d, 'EEE d')}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -159,6 +215,7 @@ function AddMealButton({ date, recipes }) {
   const { addPlan } = useMealPlan()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [assignedTo, setAssignedTo] = useState('both')
 
   const filtered = recipes.filter(r =>
     r.title?.toLowerCase().includes(search.toLowerCase())
@@ -173,10 +230,11 @@ function AddMealButton({ date, recipes }) {
       sourceSite:  recipe.sourceSite || '',
       servings:    recipe.servings || 2,
       notes:       '',
-      assignedTo:  'both',
+      assignedTo,
     })
     setOpen(false)
     setSearch('')
+    setAssignedTo('both')
   }
 
   if (!open) {
@@ -200,6 +258,22 @@ function AddMealButton({ date, recipes }) {
           autoFocus
         />
       </div>
+
+      {/* Who's eating selector */}
+      <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+        <span className="text-[10px] text-cream/40">Who's eating:</span>
+        {['both', 'jacob', 'caroline'].map(opt => (
+          <button
+            key={opt}
+            onClick={() => setAssignedTo(opt)}
+            className={`text-[10px] px-2 py-0.5 rounded-full capitalize transition-colors
+              ${assignedTo === opt ? 'bg-gold/20 text-gold' : 'text-cream/40 hover:text-cream'}`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+
       {filtered.length === 0
         ? <p className="text-xs text-cream/30 px-3 py-2">No saved recipes yet</p>
         : <ul>
