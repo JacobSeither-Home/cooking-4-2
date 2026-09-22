@@ -134,10 +134,12 @@ export function StarRating({ rating = 0, max = 5, size = 14, interactive = false
 }
 
 // ── House badge ───────────────────────────────────────────────────────────────
+// Only renders when assignedTo is a specific person (not 'both')
 export function HouseBadge({ house, size = 'sm' }) {
-  const isJacob = house === 'jacob'
-  const label   = isJacob ? 'Jacob' : 'Caroline'
-  const classes = isJacob
+  if (!house || house === 'both') return null
+  const isJacob  = house === 'jacob'
+  const label    = isJacob ? 'Jacob' : 'Caroline'
+  const classes  = isJacob
     ? 'bg-gold/10 text-gold border-gold/30'
     : 'bg-pink/10 text-pink border-pink/30'
   return (

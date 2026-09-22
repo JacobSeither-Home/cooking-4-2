@@ -30,7 +30,7 @@ function getGenre(title = '') {
 export default function MealPlanPage() {
   const { plans, loading, removePlan, updatePlan } = useMealPlan()
   const { recipes } = useRecipes()
-  const { lists, createList, mergeIntoList } = useGroceryLists()
+  const { lists, createList, mergeIntoList, removePlanFromList } = useGroceryLists()
   const navigate = useNavigate()
 
   const [weekOffset, setWeekOffset] = useState(0)
@@ -207,6 +207,7 @@ export default function MealPlanPage() {
                       onCook={() => navigate('/cook', { state: { planId: plan.id } })}
                       onRemove={() => removePlan(plan.id)}
                       onAddGrocery={() => handleAddToGrocery(plan)}
+                      onRemoveGrocery={() => removePlanFromList(plan.id)}
                       onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
                     />
@@ -222,16 +223,17 @@ export default function MealPlanPage() {
 }
 
 // ── Single meal row ───────────────────────────────────────────────────────────
-function MealItem({ plan, isAdded, onCook, onRemove, onAddGrocery, onDragStart, onDragEnd }) {
-  const [addingGrocery, setAddingGrocery] = useState(false)
+function MealItem({ plan, isAdded, onCook, onRemove, onAddGrocery, onRemoveGrocery, onDragStart, onDragEnd }) {
+  const [busyGrocery, setBusyGrocery] = useState(false)
 
-  const handleAddGrocery = async () => {
-    if (isAdded || addingGrocery) return
-    setAddingGrocery(true)
+  const handleGroceryToggle = async () => {
+    if (busyGrocery) return
+    setBusyGrocery(true)
     try {
-      await onAddGrocery()
+      if (isAdded) await onRemoveGrocery()
+      else         await onAddGrocery()
     } finally {
-      setAddingGrocery(false)
+      setBusyGrocery(false)
     }
   }
 
@@ -262,20 +264,20 @@ function MealItem({ plan, isAdded, onCook, onRemove, onAddGrocery, onDragStart, 
 
       {/* Action buttons */}
       <div className="flex gap-1 flex-shrink-0">
-        {/* Add to grocery */}
+        {/* Add / remove grocery toggle */}
         <button
-          onClick={handleAddGrocery}
-          disabled={addingGrocery}
-          title={isAdded ? 'Added to grocery list' : 'Add to grocery list'}
+          onClick={handleGroceryToggle}
+          disabled={busyGrocery}
+          title={isAdded ? 'Remove from grocery list' : 'Add to grocery list'}
           className={`btn-icon w-7 h-7 transition-all
             ${isAdded
-              ? 'text-gold border-gold/30 bg-gold/10'
+              ? 'text-gold border-gold/30 bg-gold/10 hover:text-pink hover:border-pink/30 hover:bg-pink/10'
               : 'text-cream/30 hover:text-gold'}`}
         >
-          {isAdded
-            ? <Check size={12} />
-            : addingGrocery
-              ? <span className="text-[10px]">…</span>
+          {busyGrocery
+            ? <span className="text-[10px]">…</span>
+            : isAdded
+              ? <Check size={12} />
               : <ShoppingCart size={12} />
           }
         </button>

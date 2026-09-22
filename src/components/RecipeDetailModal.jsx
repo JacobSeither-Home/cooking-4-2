@@ -1,4 +1,4 @@
-import { X, Clock, Users, ExternalLink, BookmarkCheck, Bookmark, Plus, ChefHat } from 'lucide-react'
+import { X, Clock, Users, ExternalLink, BookmarkCheck, Bookmark, Plus, Loader } from 'lucide-react'
 import { StarRating, DecoDivider, DecoCornerFrame } from './DecoFrame'
 import { useMealPlan } from '../hooks/useFirestore'
 import { useState } from 'react'
@@ -25,6 +25,9 @@ export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) 
     setAdded(true)
     setAdding(false)
   }
+
+  const isLoading = recipe._loading === true
+  const loadError = recipe._loadError
 
   return (
     <div
@@ -56,7 +59,11 @@ export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) 
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-cream/50">
-              {recipe.sourceSite && <span>{recipe.sourceSite}</span>}
+              {(recipe.sourceSite || recipe.site) && (
+                <span className="bg-raised border border-border px-2 py-0.5 rounded-full text-cream/60">
+                  {recipe.sourceSite || recipe.site}
+                </span>
+              )}
               {recipe.prepTime && (
                 <span className="flex items-center gap-1"><Clock size={11} /> {recipe.prepTime + (recipe.cookTime || 0)} min</span>
               )}
@@ -73,8 +80,32 @@ export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) 
 
           <DecoDivider />
 
+          {/* Loading state */}
+          {isLoading && (
+            <div className="flex flex-col items-center gap-3 py-6 text-cream/40">
+              <Loader size={20} className="animate-spin text-gold/60" />
+              <p className="text-xs font-body">Fetching full recipe…</p>
+              {/* Skeleton rows */}
+              <div className="w-full space-y-2 mt-2">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-gold/20 flex-shrink-0" />
+                    <div className="skeleton h-3 rounded flex-1" style={{ opacity: 0.6 - i * 0.1 }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Load error */}
+          {loadError && !isLoading && (
+            <div className="text-xs text-pink bg-pink/10 border border-pink/20 rounded-lg px-3 py-2">
+              Couldn't load full recipe: {loadError}
+            </div>
+          )}
+
           {/* Ingredients */}
-          {recipe.ingredients?.length > 0 && (
+          {!isLoading && recipe.ingredients?.length > 0 && (
             <section>
               <h3 className="font-display text-sm text-gold/80 uppercase tracking-widest mb-3">Ingredients</h3>
               <ul className="space-y-1.5">
@@ -92,7 +123,7 @@ export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) 
           )}
 
           {/* Steps preview (first 3) */}
-          {recipe.steps?.length > 0 && (
+          {!isLoading && recipe.steps?.length > 0 && (
             <section>
               <h3 className="font-display text-sm text-gold/80 uppercase tracking-widest mb-3">Method</h3>
               <ol className="space-y-3">
@@ -121,7 +152,7 @@ export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) 
 
             <button
               onClick={handleAddToPlan}
-              disabled={adding}
+              disabled={adding || isLoading}
               className="flex-1 btn-pink disabled:opacity-50"
             >
               <Plus size={15} />
@@ -129,15 +160,15 @@ export default function RecipeDetailModal({ recipe, isSaved, onSave, onClose }) 
             </button>
           </div>
 
-          {recipe.sourceUrl && (
+          {(recipe.sourceUrl || recipe.url) && (
             <a
-              href={recipe.sourceUrl}
+              href={recipe.sourceUrl || recipe.url}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 text-xs text-cream/30 hover:text-gold transition-colors"
             >
               <ExternalLink size={12} />
-              View on {recipe.sourceSite || 'original site'}
+              View on {recipe.sourceSite || recipe.site || 'original site'}
             </a>
           )}
         </div>

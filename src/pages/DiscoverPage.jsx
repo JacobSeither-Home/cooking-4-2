@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Search, Link2, X, Plus, Sparkles } from 'lucide-react'
+import { Search, Link2, X } from 'lucide-react'
 import { PageHeader, EmptyState, SkeletonCard, DecoDivider } from '../components/DecoFrame'
 import RecipeCard from '../components/RecipeCard'
 import { useRecipes, useSites } from '../hooks/useFirestore'
@@ -13,14 +13,14 @@ export default function DiscoverPage() {
   const { sites }  = useSites()
   const { plans }  = useMealPlan()
 
-  const [query,   setQuery]   = useState('')
-  const [results, setResults] = useState([])
-  const [urlInput, setUrlInput] = useState('')
+  const [query,      setQuery]      = useState('')
+  const [results,    setResults]    = useState([])
+  const [urlInput,   setUrlInput]   = useState('')
   const [showUrlBar, setShowUrlBar] = useState(false)
-  const [searching, setSearching] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [error,    setError]   = useState(null)
-  const [selected, setSelected] = useState(null)  // recipe to show in modal
+  const [searching,  setSearching]  = useState(false)
+  const [importing,  setImporting]  = useState(false)
+  const [error,      setError]      = useState(null)
+  const [selected,   setSelected]   = useState(null)  // recipe to show in modal
 
   const savedIds = new Set(recipes.map(r => r.sourceUrl))
 
@@ -60,6 +60,38 @@ export default function DiscoverPage() {
       setImporting(false)
     }
   }, [urlInput])
+
+  // Clicking a search result: show a preview immediately, fetch the full recipe in the background
+  const handleSelectRecipe = useCallback(async (recipe) => {
+    // Normalize field names — search results use 'url'/'site', saved recipes use 'sourceUrl'/'sourceSite'
+    const normalized = {
+      ...recipe,
+      sourceUrl:  recipe.sourceUrl  || recipe.url,
+      sourceSite: recipe.sourceSite || recipe.site,
+    }
+
+    // Saved recipes already have full data — open directly
+    if (recipe.ingredients?.length > 0) {
+      setSelected(normalized)
+      return
+    }
+
+    // Search result stub: show preview immediately, then fill in full recipe
+    setSelected({ ...normalized, _loading: true })
+    try {
+      const full = await importRecipeFromUrl(normalized.sourceUrl)
+      // Merge so we keep sourceUrl/sourceSite even if the worker response uses different names
+      setSelected({
+        ...full,
+        sourceUrl:  full.sourceUrl  || normalized.sourceUrl,
+        sourceSite: full.sourceSite || normalized.sourceSite,
+        image:      full.image      || normalized.image,
+      })
+    } catch (err) {
+      // Keep the partial preview visible; show error inside the modal
+      setSelected(prev => ({ ...prev, _loading: false, _loadError: err.message }))
+    }
+  }, [])
 
   const handleSave = useCallback(async (recipe) => {
     await saveRecipe(recipe)
@@ -146,7 +178,7 @@ export default function DiscoverPage() {
                   saved={true}
                   showBadge="recommend"
                   sharedCount={sharedIngredients.length}
-                  onClick={() => setSelected(recipe)}
+                  onClick={() => handleSelectRecipe(recipe)}
                 />
               ))}
             </div>
@@ -179,7 +211,7 @@ export default function DiscoverPage() {
                 recipe={recipe}
                 saved={savedIds.has(recipe.sourceUrl || recipe.url)}
                 onSave={() => handleSave(recipe)}
-                onClick={() => setSelected(recipe)}
+                onClick={() => handleSelectRecipe(recipe)}
               />
             ))}
           </div>

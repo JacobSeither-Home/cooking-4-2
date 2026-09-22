@@ -141,7 +141,17 @@ export function useGroceryLists() {
     })
   }, [lists, user])
 
-  return { lists, loading, createList, toggleItem, deleteList, mergeIntoList }
+  // Remove a plan's association from all lists (items stay, just delinks the plan)
+  const removePlanFromList = useCallback(async (planId) => {
+    const matching = lists.filter(l => l.mealPlanIds?.includes(planId))
+    await Promise.all(matching.map(l =>
+      updateDoc(doc(db, 'groceryLists', l.id), {
+        mealPlanIds: arrayRemove(planId),
+      })
+    ))
+  }, [lists])
+
+  return { lists, loading, createList, toggleItem, deleteList, mergeIntoList, removePlanFromList }
 }
 
 // ── Pantry ────────────────────────────────────────────────────────────────────

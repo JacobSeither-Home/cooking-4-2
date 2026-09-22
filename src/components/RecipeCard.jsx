@@ -9,7 +9,8 @@ export default function RecipeCard({
   showBadge,      // 'recommend' | null
   sharedCount,    // number of shared ingredients
 }) {
-  const { title, description, image, sourceSite, prepTime, cookTime, servings, rating, genre } = recipe
+  const { title, description, image, sourceSite, site, prepTime, cookTime, servings, rating, genre } = recipe
+  const siteName = sourceSite || site   // search results use 'site', saved use 'sourceSite'
 
   return (
     <div
@@ -51,20 +52,26 @@ export default function RecipeCard({
             : <Bookmark size={15} className="opacity-70" />
           }
         </button>
-
-        {/* Source site */}
-        {sourceSite && (
-          <div className="absolute bottom-2 left-2">
-            <span className="text-[10px] text-cream/50 bg-base/70 backdrop-blur px-1.5 py-0.5 rounded">
-              {sourceSite}
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Content */}
       <div className="p-3 space-y-2">
         <h3 className="font-display text-base text-cream leading-snug line-clamp-2">{title}</h3>
+
+        {/* Site + rating chips row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {siteName && (
+            <span className="text-[11px] bg-raised border border-border text-cream/60 px-2 py-0.5 rounded-full">
+              {siteName}
+            </span>
+          )}
+          {rating > 0 && (
+            <span className="flex items-center gap-1">
+              <StarRating rating={rating} size={10} />
+              <span className="text-[11px] text-cream/40">{rating.toFixed(1)}</span>
+            </span>
+          )}
+        </div>
 
         {description && (
           <p className="text-xs text-cream/50 line-clamp-2 font-body">{description}</p>
@@ -86,8 +93,6 @@ export default function RecipeCard({
               </span>
             )}
           </div>
-
-          {rating > 0 && <StarRating rating={rating} size={11} />}
         </div>
       </div>
     </div>
@@ -105,7 +110,7 @@ export function RecipeListItem({ recipe, onRemove, action }) {
       <div className="flex-1 min-w-0">
         <p className="font-display text-sm text-cream truncate">{recipe.title}</p>
         <p className="text-[11px] text-cream/40">
-          {[recipe.sourceSite, recipe.genre?.[0]].filter(Boolean).join(' · ')}
+          {[recipe.sourceSite || recipe.site, recipe.genre?.[0]].filter(Boolean).join(' · ')}
         </p>
       </div>
       {action || (onRemove && (
